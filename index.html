@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unity Prefab to Quarks Converter</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      grid-column: 1 / -1;
+      padding: 12px 20px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-right: auto;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #e94560;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #ff6b6b;
+    }
+
+    .btn-secondary {
+      background: #0f3460;
+      color: #eee;
+    }
+
+    .btn-secondary:hover {
+      background: #1a4a7a;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: #16213e;
+      border-right: 1px solid #0f3460;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .path-input {
+      padding: 12px;
+      border-bottom: 1px solid #0f3460;
+    }
+
+    .path-input input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      background: #1a1a2e;
+      color: #eee;
+      font-size: 13px;
+    }
+
+    .path-input input:focus {
+      outline: none;
+      border-color: #e94560;
+    }
+
+    .file-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .tree-item {
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .tree-item:hover {
+      background: #0f3460;
+    }
+
+    .tree-item.selected {
+      background: #e94560;
+    }
+
+    .tree-item.folder::before {
+      content: '📁';
+    }
+
+    .tree-item.prefab::before {
+      content: '✨';
+    }
+
+    .tree-indent {
+      margin-left: 16px;
+    }
+
+    /* Preview */
+    .preview {
+      position: relative;
+      background: #0a0a14;
+    }
+
+    #preview-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .preview-info {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    /* Footer / Log */
+    .footer {
+      grid-column: 1 / -1;
+      background: #16213e;
+      border-top: 1px solid #0f3460;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-family: monospace;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      padding: 2px 0;
+    }
+
+    .log-entry.error {
+      color: #ff6b6b;
+    }
+
+    .log-entry.success {
+      color: #4ecca3;
+    }
+
+    /* Loading */
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Unity Prefab → Quarks Converter</h1>
+      <button class="btn btn-secondary" id="btn-refresh">새로고침</button>
+      <button class="btn btn-primary" id="btn-convert">변환</button>
+      <button class="btn btn-secondary" id="btn-save">저장</button>
+    </header>
+
+    <aside class="sidebar">
+      <div class="path-input">
+        <input type="text" id="assets-path" placeholder="Unity Assets 폴더 경로 입력..." />
+      </div>
+      <div class="file-tree" id="file-tree">
+        <div class="loading">경로를 입력하세요</div>
+      </div>
+    </aside>
+
+    <main class="preview">
+      <canvas id="preview-canvas"></canvas>
+      <div class="preview-info" id="preview-info">
+        파티클 시스템을 선택하세요
+      </div>
+    </main>
+
+    <footer class="footer" id="log">
+      <div class="log-entry">준비됨</div>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/client/main.ts"></script>
+</body>
+</html>
