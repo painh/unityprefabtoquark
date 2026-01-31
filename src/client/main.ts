@@ -1212,10 +1212,23 @@ function createParticleSystemFromData(data: Record<string, unknown>, texture?: T
     const hasTSA = tsaData?.enabled === true;
     const tilesX = hasTSA ? (tsaData.tilesX as number) || 1 : 1;
     const tilesY = hasTSA ? (tsaData.tilesY as number) || 1 : 1;
+    const animationType = hasTSA ? (tsaData.animationType as number) || 0 : 0; // 0: WholeSheet, 1: SingleRow
+    const rowIndex = hasTSA ? (tsaData.rowIndex as number) || 0 : 0;
 
-    console.log('Texture Sheet Animation:', { enabled: hasTSA, tilesX, tilesY });
+    console.log('Texture Sheet Animation:', { enabled: hasTSA, tilesX, tilesY, animationType, rowIndex });
 
     const speedFactor = (data.speedFactor as number) || 1;
+
+    // SingleRow 모드에서는 startTileIndex를 해당 행의 시작 프레임으로 설정
+    let startTileIdx = 0;
+    let framesInAnimation = tilesX * tilesY;
+
+    if (animationType === 1 && tilesY > 1) {
+      // SingleRow 모드: 특정 행만 애니메이션
+      startTileIdx = rowIndex * tilesX;
+      framesInAnimation = tilesX; // 해당 행의 프레임 수만
+      console.log(`SingleRow 모드: rowIndex=${rowIndex}, startTileIdx=${startTileIdx}, framesInAnimation=${framesInAnimation}`);
+    }
 
     const ps = new ParticleSystem({
       duration,
@@ -1236,20 +1249,21 @@ function createParticleSystemFromData(data: Record<string, unknown>, texture?: T
       renderOrder: 0,
       uTileCount: tilesX,
       vTileCount: tilesY,
-      startTileIndex: new ConstantValue(0),
+      startTileIndex: new ConstantValue(startTileIdx),
       speedFactor,
     });
 
     // Texture Sheet Animation behavior 추가
-    if (hasTSA && tilesX * tilesY > 1) {
-      const totalFrames = tilesX * tilesY;
-      // FrameOverLife: 0에서 totalFrames-1까지 선형 진행
+    if (hasTSA && framesInAnimation > 1) {
+      // FrameOverLife: startTileIdx에서 startTileIdx + framesInAnimation - 1까지 선형 진행
+      const startFrame = startTileIdx;
+      const endFrame = startTileIdx + framesInAnimation;
       ps.addBehavior(
         new FrameOverLife(
-          new PiecewiseBezier([[new Bezier(0, 0, totalFrames, totalFrames), 0]])
+          new PiecewiseBezier([[new Bezier(startFrame, startFrame, endFrame, endFrame), 0]])
         )
       );
-      console.log('FrameOverLife behavior 추가됨, totalFrames:', totalFrames);
+      console.log('FrameOverLife behavior 추가됨, frames:', startFrame, '->', endFrame);
     }
 
     // Behaviors 추가
@@ -1339,13 +1353,47 @@ function addBehaviorToSystem(ps: ParticleSystem, behavior: Record<string, unknow
       break;
     }
     case 'SizeOverLife': {
-      const sizeData = behavior.size as Record<string, unknown> | undefined;
-      if (sizeData) {
+      const separateAxes = behavior.separateAxes as boolean | undefined;
+      if (separateAxes) {
+        // Separate Axes 모드 - Vector3Function 사용
+        const xData = behavior.x as Record<string, unknown> | undefined;
+        const yData = behavior.y as Record<string, unknown> | undefined;
+        const zData = behavior.z as Record<string, unknown> | undefined;
+
+        const createBezier = (data: Record<string, unknown> | undefined) => {
+          if (data?.type === 'bezier' && data.bezierPoints) {
+            const points = data.bezierPoints as number[][];
+            if (points.length >= 2) {
+              // 간단한 시작/끝 값 사용
+              const startVal = points[0][1];
+              const endVal = points[points.length - 1][1];
+              return new PiecewiseBezier([[new Bezier(startVal, startVal * 0.75, endVal * 0.5, endVal), 0]]);
+            }
+          }
+          // 기본값: 1에서 1로 유지
+          const val = (data?.value as number) || 1;
+          return new PiecewiseBezier([[new Bezier(val, val, val, val), 0]]);
+        };
+
         ps.addBehavior(
           new SizeOverLife(
-            new PiecewiseBezier([[new Bezier(1, 0.75, 0.5, 0), 0]])
+            new Vector3Function(
+              createBezier(xData),
+              createBezier(yData),
+              createBezier(zData)
+            )
           )
         );
+        console.log('SizeOverLife Separate Axes 적용됨');
+      } else {
+        const sizeData = behavior.size as Record<string, unknown> | undefined;
+        if (sizeData) {
+          ps.addBehavior(
+            new SizeOverLife(
+              new PiecewiseBezier([[new Bezier(1, 0.75, 0.5, 0), 0]])
+            )
+          );
+        }
       }
       break;
     }
