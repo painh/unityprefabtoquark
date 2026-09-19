@@ -16,6 +16,7 @@ import {
   SizeOverLife,
   FrameOverLife,
   ApplyForce,
+  Noise,
   ColorRange,
   PiecewiseBezier,
   Bezier,
@@ -533,6 +534,12 @@ let frameCount = 0;
 let fps = 0;
 let statsElement: HTMLDivElement | null = null;
 
+// Playback 상태
+let isPlaying = true;
+let isLooping = true;
+let playbackTime = 0;
+let systemDuration = 5; // 기본 duration
+
 // Log counts
 let logCounts = { all: 0, info: 0, warning: 0, error: 0 };
 
@@ -558,6 +565,36 @@ const conversionPanel = document.getElementById('conversion-panel') as HTMLDivEl
 const conversionContent = document.getElementById('conversion-content') as HTMLDivElement;
 const conversionToggle = document.getElementById('conversion-toggle') as HTMLButtonElement;
 
+// Playback Controls
+const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
+const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
+const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement;
+const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
+const btnLoop = document.getElementById('btn-loop') as HTMLButtonElement;
+const playbackTimeDisplay = document.getElementById('playback-time') as HTMLSpanElement;
+
+// Shader Modal
+const btnShader = document.getElementById('btn-shader') as HTMLButtonElement;
+const shaderModal = document.getElementById('shader-modal') as HTMLDivElement;
+const shaderModalClose = document.getElementById('shader-modal-close') as HTMLButtonElement;
+const shaderNameEl = document.getElementById('shader-name') as HTMLSpanElement;
+const shaderPathEl = document.getElementById('shader-path') as HTMLSpanElement;
+const shaderStatusEl = document.getElementById('shader-status') as HTMLSpanElement;
+const shaderPromptArea = document.getElementById('shader-prompt-area') as HTMLDivElement;
+const shaderPromptTextarea = document.getElementById('shader-prompt') as HTMLTextAreaElement;
+const shaderCodeArea = document.getElementById('shader-code-area') as HTMLDivElement;
+const shaderOutputPathEl = document.getElementById('shader-output-path') as HTMLSpanElement;
+const btnCopyPrompt = document.getElementById('btn-copy-prompt') as HTMLButtonElement;
+const btnRegisterShader = document.getElementById('btn-register-shader') as HTMLButtonElement;
+
+// 현재 쉐이더 정보 저장
+let currentShaderInfo: {
+  shaderGuid: string;
+  shaderName: string;
+  shaderPath: string;
+  cacheStatus: string;
+} | null = null;
+
 // Initialize
 init();
 
@@ -566,6 +603,8 @@ async function init() {
   initEventListeners();
   initLogPanel();
   initConversionPanel();
+  initPlaybackControls();
+  initShaderModal();
   await restoreFromStorage();
   animate();
 }
@@ -919,6 +958,21 @@ async function loadParticlePreview(quarksJson: unknown, textureUrls?: string[], 
     }
 
     log(`${particleSystems.length}개 파티클 시스템 로드됨`);
+
+    // 첫 번째 파티클 시스템의 duration 사용 또는 최대값 사용
+    if (particleSystems.length > 0) {
+      systemDuration = Math.max(...particleSystems.map(ps => ps.duration));
+      isLooping = particleSystems[0].looping;
+
+      // 모든 파티클 시스템의 looping 상태를 현재 UI 상태와 동기화
+      for (const ps of particleSystems) {
+        ps.looping = isLooping;
+      }
+
+      playbackTime = 0;
+      isPlaying = true;
+      updatePlaybackButtonStates();
+    }
   } catch (error) {
     log(`파티클 로드 실패: ${error}`, 'error');
     console.error('파티클 로드 에러:', error);
@@ -944,6 +998,8 @@ function createParticleSystemFromData(data: Record<string, unknown>, texture?: T
       // Unity radiusThickness: 0 = surface, 1 = volume
       // three.quarks thickness: 같은 의미 (0~1 범위)
       const thickness = (shapeData.thickness as number) ?? 1;
+      // Unity randomDirectionAmount -> three.quarks spread
+      const spread = (shapeData.spread as number) || 0;
 
       switch (shapeType) {
         case 'cone':
@@ -952,13 +1008,14 @@ function createParticleSystemFromData(data: Record<string, unknown>, texture?: T
             angle: (shapeData.angle as number) || 0.5,
             arc: (shapeData.arc as number) || Math.PI * 2,
             thickness: thickness,
+            spread: spread,
           });
           break;
         case 'sphere':
-          shape = new SphereEmitter({ radius: radius, thickness: thickness });
+          shape = new SphereEmitter({ radius: radius, thickness: thickness, spread: spread });
           break;
         case 'hemisphere':
-          shape = new HemisphereEmitter({ radius: radius, thickness: thickness });
+          shape = new HemisphereEmitter({ radius: radius, thickness: thickness, spread: spread });
           break;
         case 'donut':
           shape = new DonutEmitter({
@@ -966,6 +1023,7 @@ function createParticleSystemFromData(data: Record<string, unknown>, texture?: T
             donutRadius: (shapeData.donutRadius as number) || radius * 0.2,
             arc: (shapeData.arc as number) || Math.PI * 2,
             thickness: thickness,
+            spread: spread,
           });
           break;
         case 'circle':
@@ -973,6 +1031,7 @@ function createParticleSystemFromData(data: Record<string, unknown>, texture?: T
             radius: radius,
             arc: (shapeData.arc as number) || Math.PI * 2,
             thickness: thickness,
+            spread: spread,
           });
           break;
         case 'box':
@@ -1230,6 +1289,30 @@ function createParticleSystemFromData(data: Record<string, unknown>, texture?: T
       console.log(`SingleRow 모드: rowIndex=${rowIndex}, startTileIdx=${startTileIdx}, framesInAnimation=${framesInAnimation}`);
     }
 
+    // RenderMode 및 RendererEmitterSettings 처리
+    const renderMode = (data.renderMode as number) || 0;
+    const rendererSettings = data.rendererSettings as { lengthScale?: number; velocityScale?: number } | undefined;
+    const trailData = data.trail as { enabled: boolean; startLength: Record<string, unknown>; followLocalOrigin: boolean } | undefined;
+
+    // StretchedBillBoard 또는 Trail 설정
+    let rendererEmitterSettings: { speedFactor: number; lengthFactor: number } | { startLength: ConstantValue; followLocalOrigin: boolean } | undefined;
+    if (renderMode === 1 && rendererSettings) {
+      // StretchedBillBoard 모드
+      rendererEmitterSettings = {
+        speedFactor: rendererSettings.velocityScale || 0,
+        lengthFactor: rendererSettings.lengthScale || 2,
+      };
+      console.log('StretchedBillBoard 설정:', rendererEmitterSettings);
+    } else if (renderMode === 3 && trailData?.enabled) {
+      // Trail 모드
+      const startLengthValue = (trailData.startLength?.value as number) || 1;
+      rendererEmitterSettings = {
+        startLength: new ConstantValue(startLengthValue),
+        followLocalOrigin: trailData.followLocalOrigin ?? false,
+      };
+      console.log('Trail 설정:', rendererEmitterSettings);
+    }
+
     const ps = new ParticleSystem({
       duration,
       looping,
@@ -1245,7 +1328,8 @@ function createParticleSystemFromData(data: Record<string, unknown>, texture?: T
       emissionBursts: emissionBursts.length > 0 ? emissionBursts : undefined,
       shape,
       material,
-      renderMode: 0, // Billboard
+      renderMode: renderMode,
+      rendererEmitterSettings: rendererEmitterSettings,
       renderOrder: 0,
       uTileCount: tilesX,
       vTileCount: tilesY,
@@ -1409,6 +1493,22 @@ function addBehaviorToSystem(ps: ParticleSystem, behavior: Record<string, unknow
         );
         console.log('ApplyForce behavior 추가됨:', direction, magnitude);
       }
+      break;
+    }
+    case 'Noise': {
+      const frequency = (behavior.frequency as number) || 0.5;
+      const power = (behavior.power as number) || 1;
+      const positionAmount = (behavior.positionAmount as number) || 1;
+      const rotationAmount = (behavior.rotationAmount as number) || 0;
+      ps.addBehavior(
+        new Noise(
+          new ConstantValue(frequency),
+          new ConstantValue(power),
+          new ConstantValue(positionAmount),
+          new ConstantValue(rotationAmount)
+        )
+      );
+      console.log('Noise behavior 추가됨:', { frequency, power, positionAmount, rotationAmount });
       break;
     }
   }
@@ -1673,6 +1773,87 @@ function initConversionPanel() {
   });
 }
 
+function initPlaybackControls() {
+  // Play button
+  btnPlay.addEventListener('click', () => {
+    if (!isPlaying) {
+      isPlaying = true;
+      for (const ps of particleSystems) {
+        ps.play();
+      }
+      updatePlaybackButtonStates();
+    }
+  });
+
+  // Pause button
+  btnPause.addEventListener('click', () => {
+    if (isPlaying) {
+      isPlaying = false;
+      for (const ps of particleSystems) {
+        ps.pause();
+      }
+      updatePlaybackButtonStates();
+    }
+  });
+
+  // Restart button
+  btnRestart.addEventListener('click', () => {
+    playbackTime = 0;
+    isPlaying = true;
+    for (const ps of particleSystems) {
+      ps.restart();
+    }
+    updatePlaybackButtonStates();
+  });
+
+  // Stop button
+  btnStop.addEventListener('click', () => {
+    playbackTime = 0;
+    isPlaying = false;
+    for (const ps of particleSystems) {
+      ps.restart();
+      ps.pause();
+    }
+    updatePlaybackButtonStates();
+  });
+
+  // Loop button
+  btnLoop.addEventListener('click', () => {
+    isLooping = !isLooping;
+    for (const ps of particleSystems) {
+      ps.looping = isLooping;
+    }
+    updatePlaybackButtonStates();
+  });
+
+  updatePlaybackButtonStates();
+}
+
+function updatePlaybackButtonStates() {
+  // Play/Pause 버튼 상태
+  if (isPlaying) {
+    btnPlay.classList.add('active');
+    btnPause.classList.remove('active');
+  } else {
+    btnPlay.classList.remove('active');
+    btnPause.classList.add('active');
+  }
+
+  // Loop 버튼 상태
+  if (isLooping) {
+    btnLoop.classList.add('active');
+  } else {
+    btnLoop.classList.remove('active');
+  }
+}
+
+function updatePlaybackTimeDisplay() {
+  // 현재 시간과 duration 표시
+  const currentTime = playbackTime.toFixed(2);
+  const duration = systemDuration.toFixed(2);
+  playbackTimeDisplay.textContent = `${currentTime} / ${duration}s`;
+}
+
 function updateConversionPanel(info: ParticleSystemConversionInfo[]) {
   conversionPanel.classList.remove('hidden');
 
@@ -1756,10 +1937,193 @@ function animate() {
 
   const delta = 0.016; // ~60fps
 
+  // Playback time 업데이트
+  if (isPlaying && particleSystems.length > 0) {
+    playbackTime += delta;
+    if (!isLooping && playbackTime >= systemDuration) {
+      playbackTime = systemDuration;
+      isPlaying = false;
+      for (const ps of particleSystems) {
+        ps.pause();
+      }
+      updatePlaybackButtonStates();
+    } else if (isLooping && playbackTime >= systemDuration) {
+      playbackTime = playbackTime % systemDuration;
+    }
+  }
+  updatePlaybackTimeDisplay();
+
   // Update particles
   batchRenderer.update(delta);
 
   cameraController.update(delta);
   viewCubeWidget.update();
   renderer.render(scene, camera);
+}
+
+// ============================================
+// 쉐이더 모달 관련 함수
+// ============================================
+
+function initShaderModal() {
+  // 쉐이더 버튼 클릭
+  btnShader.addEventListener('click', async () => {
+    if (!selectedPrefab) {
+      log('Prefab을 먼저 선택하세요', 'error');
+      return;
+    }
+    await openShaderModal();
+  });
+
+  // 모달 닫기
+  shaderModalClose.addEventListener('click', closeShaderModal);
+  shaderModal.addEventListener('click', (e) => {
+    if (e.target === shaderModal) {
+      closeShaderModal();
+    }
+  });
+
+  // ESC 키로 닫기
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && shaderModal.classList.contains('visible')) {
+      closeShaderModal();
+    }
+  });
+
+  // 프롬프트 복사
+  btnCopyPrompt.addEventListener('click', async () => {
+    const prompt = shaderPromptTextarea.value;
+    if (prompt) {
+      await navigator.clipboard.writeText(prompt);
+      log('프롬프트가 클립보드에 복사되었습니다', 'success');
+      btnCopyPrompt.textContent = '복사됨!';
+      setTimeout(() => {
+        btnCopyPrompt.textContent = '프롬프트 복사';
+      }, 2000);
+
+      // 파일 경로 및 등록 버튼 표시
+      shaderCodeArea.style.display = 'block';
+      btnRegisterShader.style.display = 'block';
+    }
+  });
+
+  // 캐시에 등록 (LLM이 파일을 이미 저장한 경우)
+  btnRegisterShader.addEventListener('click', async () => {
+    if (!currentShaderInfo) {
+      log('쉐이더 정보가 없습니다', 'error');
+      return;
+    }
+
+    try {
+      btnRegisterShader.textContent = '확인 중...';
+      btnRegisterShader.disabled = true;
+
+      const response = await fetch('/api/shader-cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shaderGuid: currentShaderInfo.shaderGuid,
+          shaderPath: currentShaderInfo.shaderPath,
+          shaderName: currentShaderInfo.shaderName,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      log(`쉐이더 캐시 등록됨: ${data.outputPath}`, 'success');
+      closeShaderModal();
+
+      // 버튼 상태 업데이트
+      updateShaderButtonStatus('cached');
+    } catch (error) {
+      log(`캐시 등록 실패: ${error}`, 'error');
+    } finally {
+      btnRegisterShader.textContent = '캐시에 등록';
+      btnRegisterShader.disabled = false;
+    }
+  });
+}
+
+async function openShaderModal() {
+  try {
+    log('쉐이더 정보 로딩 중...');
+
+    const url = `/api/shader-prompt?prefabPath=${encodeURIComponent(selectedPrefab)}&assetsRoot=${encodeURIComponent(assetsPath)}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    // 쉐이더 정보 업데이트
+    shaderNameEl.textContent = data.shaderName || '-';
+    shaderPathEl.textContent = data.shaderPath || '-';
+
+    // 예상 출력 경로 계산
+    const safeShaderName = (data.shaderName || '').replace(/[^a-zA-Z0-9]/g, '_');
+    const expectedOutputPath = `.shader-cache/${safeShaderName}.ts`;
+
+    // 상태 표시
+    shaderStatusEl.className = 'shader-status';
+    if (data.cacheStatus === 'cached') {
+      shaderStatusEl.textContent = '캐시됨';
+      shaderStatusEl.classList.add('cached');
+      shaderPromptArea.style.display = 'none';
+      shaderCodeArea.style.display = 'block';
+      shaderOutputPathEl.textContent = data.cachedMaterialPath || expectedOutputPath;
+      btnRegisterShader.style.display = 'none';
+    } else if (data.cacheStatus === 'needs_conversion') {
+      shaderStatusEl.textContent = '변환 필요';
+      shaderStatusEl.classList.add('needs-conversion');
+      shaderPromptArea.style.display = 'block';
+      shaderPromptTextarea.value = data.prompt || '';
+      shaderCodeArea.style.display = 'none';
+      shaderOutputPathEl.textContent = expectedOutputPath;
+      btnRegisterShader.style.display = 'none';
+    } else {
+      shaderStatusEl.textContent = '쉐이더 없음';
+      shaderStatusEl.classList.add('no-shader');
+      shaderPromptArea.style.display = 'none';
+      shaderCodeArea.style.display = 'none';
+    }
+
+    // 현재 쉐이더 정보 저장
+    currentShaderInfo = {
+      shaderGuid: data.shaderGuid,
+      shaderName: data.shaderName,
+      shaderPath: data.shaderPath,
+      cacheStatus: data.cacheStatus,
+    };
+
+    // 쉐이더 버튼 상태 업데이트
+    updateShaderButtonStatus(data.cacheStatus);
+
+    // 모달 표시
+    shaderModal.classList.add('visible');
+    log('쉐이더 정보 로드 완료', 'success');
+  } catch (error) {
+    log(`쉐이더 정보 로드 실패: ${error}`, 'error');
+  }
+}
+
+function closeShaderModal() {
+  shaderModal.classList.remove('visible');
+}
+
+function updateShaderButtonStatus(status: string) {
+  btnShader.className = 'btn';
+  if (status === 'cached') {
+    btnShader.classList.add('btn-shader-cached');
+    btnShader.textContent = '쉐이더 ✓';
+  } else if (status === 'needs_conversion') {
+    btnShader.classList.add('btn-shader-needs');
+    btnShader.textContent = '쉐이더 !';
+  } else {
+    btnShader.classList.add('btn-secondary');
+    btnShader.textContent = '쉐이더';
+  }
 }

@@ -11,6 +11,7 @@ export interface UnityDocument {
   objects: UnityObject[];
   gameObjects: UnityGameObject[];
   particleSystems: UnityParticleSystem[];
+  particleSystemRenderers: Map<number, UnityParticleSystemRenderer>; // gameObject fileID -> renderer
 }
 
 export interface UnityGameObject {
@@ -47,8 +48,11 @@ export interface UnityParticleSystem {
     startSizeZ: UnityMinMaxCurve;
     startRotation3D: boolean;
     startRotation: UnityMinMaxCurve;
+    startRotationX: UnityMinMaxCurve;
+    startRotationY: UnityMinMaxCurve;
     startColor: UnityMinMaxGradient;
     gravityModifier: UnityMinMaxCurve;
+    simulationSpeed: number;
     simulationSpace: number;
     maxParticles: number;
     playOnAwake: boolean;
@@ -65,8 +69,11 @@ export interface UnityParticleSystem {
     enabled: boolean;
     type: number; // 0: Sphere, 1: Hemisphere, 2: Cone, 3: Box, etc.
     radius: number;
+    radiusThickness: number; // 0 = surface, 1 = volume
     angle: number;
     length: number;
+    donutRadius: number; // Donut shape의 내부 반지름
+    arc: number; // Arc 각도 (도넛, 원 등에서 사용)
     scale: { x: number; y: number; z: number };
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
@@ -75,6 +82,14 @@ export interface UnityParticleSystem {
   };
   // Velocity Over Lifetime
   velocityOverLifetime: {
+    enabled: boolean;
+    x: UnityMinMaxCurve;
+    y: UnityMinMaxCurve;
+    z: UnityMinMaxCurve;
+    space: number;
+  };
+  // Force Over Lifetime
+  forceOverLifetime: {
     enabled: boolean;
     x: UnityMinMaxCurve;
     y: UnityMinMaxCurve;
@@ -103,6 +118,16 @@ export interface UnityParticleSystem {
     y: UnityMinMaxCurve;
     z: UnityMinMaxCurve;
   };
+  // Noise Module
+  noise: {
+    enabled: boolean;
+    strength: UnityMinMaxCurve;
+    frequency: number;
+    scrollSpeed: UnityMinMaxCurve;
+    positionAmount: UnityMinMaxCurve;
+    rotationAmount: UnityMinMaxCurve;
+    sizeAmount: UnityMinMaxCurve;
+  };
   // Texture Sheet Animation (UVModule)
   textureSheetAnimation: {
     enabled: boolean;
@@ -115,11 +140,28 @@ export interface UnityParticleSystem {
     startFrame: UnityMinMaxCurve;
     cycles: number;
   };
+  // Trail Module
+  trail: {
+    enabled: boolean;
+    ratio: number; // 0~1, 몇 퍼센트의 파티클이 trail을 가질지
+    lifetime: UnityMinMaxCurve;
+    minVertexDistance: number;
+    worldSpace: boolean;
+    dieWithParticles: boolean;
+    sizeAffectsWidth: boolean;
+    sizeAffectsLifetime: boolean;
+    inheritParticleColor: boolean;
+    colorOverLifetime: UnityMinMaxGradient;
+    widthOverTrail: UnityMinMaxCurve;
+    colorOverTrail: UnityMinMaxGradient;
+  };
   // Renderer
   renderer: {
     material: { fileID: number; guid?: string };
     renderMode: number;
     sortMode: number;
+    lengthScale: number;
+    velocityScale: number;
   };
 }
 
@@ -203,6 +245,7 @@ export interface UnityBurst {
   countCurve: UnityMinMaxCurve;
   cycleCount: number;
   repeatInterval: number;
+  probability: number;
 }
 
 // Unity Class ID 상수
@@ -214,6 +257,17 @@ const UNITY_CLASS_IDS = {
   Material: 21,
 };
 
+// ParticleSystemRenderer 데이터
+export interface UnityParticleSystemRenderer {
+  fileId: number;
+  gameObject: { fileID: number };
+  renderMode: number; // 0: Billboard, 1: Stretch, 2: HorizontalBillboard, 3: VerticalBillboard, 4: Mesh
+  sortMode: number;
+  lengthScale: number;
+  velocityScale: number;
+  normalDirection: number;
+}
+
 /**
  * Unity YAML 파일 파싱
  * Unity는 여러 YAML 문서를 --- 구분자로 연결하고
@@ -223,6 +277,7 @@ export function parseUnityYaml(content: string): UnityDocument {
   const objects: UnityObject[] = [];
   const gameObjects: UnityGameObject[] = [];
   const particleSystems: UnityParticleSystem[] = [];
+  const particleSystemRenderers: Map<number, UnityParticleSystemRenderer> = new Map();
   const transforms: Map<number, UnityTransform> = new Map();
 
   // %YAML 1.1 및 %TAG 헤더 제거
@@ -262,13 +317,31 @@ export function parseUnityYaml(content: string): UnityDocument {
       } else if (classId === UNITY_CLASS_IDS.ParticleSystem) {
         const ps = parseParticleSystem(fileId, data);
         if (ps) particleSystems.push(ps);
+      } else if (classId === UNITY_CLASS_IDS.ParticleSystemRenderer) {
+        const psr = parseParticleSystemRenderer(fileId, data);
+        if (psr) {
+          // gameObject fileID를 키로 사용
+          particleSystemRenderers.set(psr.gameObject.fileID, psr);
+        }
       }
     } catch (e) {
       console.warn(`Failed to parse document with fileId ${fileId}:`, e);
     }
   }
 
-  return { objects, gameObjects, particleSystems };
+  return { objects, gameObjects, particleSystems, particleSystemRenderers };
+}
+
+function parseParticleSystemRenderer(fileId: number, data: Record<string, unknown>): UnityParticleSystemRenderer | null {
+  return {
+    fileId,
+    gameObject: data.m_GameObject as { fileID: number } || { fileID: 0 },
+    renderMode: parseInt(String(data.m_RenderMode)) || 0,
+    sortMode: parseInt(String(data.m_SortMode)) || 0,
+    lengthScale: parseFloat(String(data.m_LengthScale)) || 2,
+    velocityScale: parseFloat(String(data.m_VelocityScale)) || 0,
+    normalDirection: parseFloat(String(data.m_NormalDirection)) || 1,
+  };
 }
 
 function parseGameObject(fileId: number, data: Record<string, unknown>): UnityGameObject | null {
@@ -325,6 +398,9 @@ function parseParticleSystem(fileId: number, data: Record<string, unknown>): Uni
   console.log('colorModule.gradient:', JSON.stringify(colorModule.gradient, null, 2));
   const sizeModule = ps.SizeModule as Record<string, unknown> || {};
   const rotationModule = ps.RotationModule as Record<string, unknown> || {};
+  const noiseModule = ps.NoiseModule as Record<string, unknown> || {};
+  const forceModule = ps.ForceModule as Record<string, unknown> || {};
+  const trailModule = ps.TrailModule as Record<string, unknown> || {};
   const uvModule = ps.UVModule as Record<string, unknown> || {};
   console.log('=== UVModule (TextureSheetAnimation) ===');
   console.log('uvModule.enabled:', uvModule.enabled);
@@ -346,8 +422,11 @@ function parseParticleSystem(fileId: number, data: Record<string, unknown>): Uni
       startSizeZ: parseMinMaxCurve(mainModule.startSizeZ),
       startRotation3D: Boolean(mainModule.startRotation3D),
       startRotation: parseMinMaxCurve(mainModule.startRotation),
+      startRotationX: parseMinMaxCurve(mainModule.startRotationX),
+      startRotationY: parseMinMaxCurve(mainModule.startRotationY),
       startColor: parseMinMaxGradient(mainModule.startColor),
       gravityModifier: parseMinMaxCurve(mainModule.gravityModifier),
+      simulationSpeed: parseFloat(String(mainModule.simulationSpeed)) || 1,
       simulationSpace: parseInt(String(ps.moveWithTransform)) || 0,
       maxParticles: parseInt(String(mainModule.maxNumParticles)) || 1000,
       playOnAwake: Boolean(ps.playOnAwake),
@@ -362,8 +441,11 @@ function parseParticleSystem(fileId: number, data: Record<string, unknown>): Uni
       enabled: Boolean(shapeModule.enabled),
       type: parseInt(String(shapeModule.type)) || 0,
       radius: parseFloat(String(shapeModule.radius)) || 1,
+      radiusThickness: shapeModule.radiusThickness !== undefined ? parseFloat(String(shapeModule.radiusThickness)) : 1,
       angle: parseFloat(String(shapeModule.angle)) || 25,
       length: parseFloat(String(shapeModule.length)) || 5,
+      donutRadius: parseFloat(String(shapeModule.donutRadius)) || 0.2,
+      arc: parseFloat(String(shapeModule.arc)) || 360,
       scale: parseVector3(shapeModule.scale as { x: number; y: number; z: number } || { x: 1, y: 1, z: 1 }),
       position: parseVector3(shapeModule.position as { x: number; y: number; z: number } || { x: 0, y: 0, z: 0 }),
       rotation: parseVector3(shapeModule.rotation as { x: number; y: number; z: number } || { x: 0, y: 0, z: 0 }),
@@ -376,6 +458,13 @@ function parseParticleSystem(fileId: number, data: Record<string, unknown>): Uni
       y: parseMinMaxCurve(velocityModule.y),
       z: parseMinMaxCurve(velocityModule.z),
       space: parseInt(String(velocityModule.inWorldSpace)) || 0,
+    },
+    forceOverLifetime: {
+      enabled: Boolean(forceModule.enabled),
+      x: parseMinMaxCurve(forceModule.x),
+      y: parseMinMaxCurve(forceModule.y),
+      z: parseMinMaxCurve(forceModule.z),
+      space: parseInt(String(forceModule.inWorldSpace)) || 0,
     },
     colorOverLifetime: {
       enabled: Boolean(colorModule.enabled),
@@ -396,6 +485,29 @@ function parseParticleSystem(fileId: number, data: Record<string, unknown>): Uni
       y: parseMinMaxCurve(rotationModule.y),
       z: parseMinMaxCurve(rotationModule.z),
     },
+    noise: {
+      enabled: Boolean(noiseModule.enabled),
+      strength: parseMinMaxCurve(noiseModule.strength),
+      frequency: parseFloat(String(noiseModule.frequency)) || 0.5,
+      scrollSpeed: parseMinMaxCurve(noiseModule.scrollSpeed),
+      positionAmount: parseMinMaxCurve(noiseModule.positionAmount),
+      rotationAmount: parseMinMaxCurve(noiseModule.rotationAmount),
+      sizeAmount: parseMinMaxCurve(noiseModule.sizeAmount),
+    },
+    trail: {
+      enabled: Boolean(trailModule.enabled),
+      ratio: parseFloat(String(trailModule.ratio)) || 1,
+      lifetime: parseMinMaxCurve(trailModule.lifetime),
+      minVertexDistance: parseFloat(String(trailModule.minVertexDistance)) || 0.2,
+      worldSpace: Boolean(trailModule.worldSpace),
+      dieWithParticles: trailModule.dieWithParticles !== undefined ? Boolean(trailModule.dieWithParticles) : true,
+      sizeAffectsWidth: Boolean(trailModule.sizeAffectsWidth),
+      sizeAffectsLifetime: Boolean(trailModule.sizeAffectsLifetime),
+      inheritParticleColor: trailModule.inheritParticleColor !== undefined ? Boolean(trailModule.inheritParticleColor) : true,
+      colorOverLifetime: parseMinMaxGradient(trailModule.colorOverLifetime),
+      widthOverTrail: parseMinMaxCurve(trailModule.widthOverTrail),
+      colorOverTrail: parseMinMaxGradient(trailModule.colorOverTrail),
+    },
     textureSheetAnimation: {
       enabled: Boolean(uvModule.enabled),
       mode: parseInt(String(uvModule.mode)) || 0,
@@ -411,6 +523,8 @@ function parseParticleSystem(fileId: number, data: Record<string, unknown>): Uni
       material: { fileID: 0 },
       renderMode: 0,
       sortMode: 0,
+      lengthScale: 0,
+      velocityScale: 0,
     },
   };
 }
@@ -565,6 +679,7 @@ function parseBursts(data: unknown): UnityBurst[] {
       countCurve: parseMinMaxCurve(burst.countCurve),
       cycleCount: parseInt(String(burst.cycleCount)) || 1,
       repeatInterval: parseFloat(String(burst.repeatInterval)) || 0.01,
+      probability: parseFloat(String(burst.probability)) || 1,
     };
   });
 }

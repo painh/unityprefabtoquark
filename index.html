@@ -20,15 +20,21 @@
     }
 
     .container {
-      display: grid;
-      grid-template-columns: 300px 1fr;
-      grid-template-rows: auto 1fr auto;
+      display: flex;
+      flex-direction: column;
       height: 100vh;
+    }
+
+    .main-area {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
     }
 
     /* Header */
     .header {
-      grid-column: 1 / -1;
+      flex-shrink: 0;
       padding: 12px 20px;
       background: #16213e;
       border-bottom: 1px solid #0f3460;
@@ -71,8 +77,28 @@
       background: #1a4a7a;
     }
 
+    .btn-shader-cached {
+      background: #2e7d32;
+      color: white;
+    }
+
+    .btn-shader-cached:hover {
+      background: #388e3c;
+    }
+
+    .btn-shader-needs {
+      background: #f57c00;
+      color: white;
+    }
+
+    .btn-shader-needs:hover {
+      background: #ff9800;
+    }
+
     /* Sidebar */
     .sidebar {
+      width: 300px;
+      flex-shrink: 0;
       background: #16213e;
       border-right: 1px solid #0f3460;
       display: flex;
@@ -138,8 +164,10 @@
 
     /* Preview */
     .preview {
+      flex: 1;
       position: relative;
       background: #0a0a14;
+      min-width: 0;
     }
 
     #preview-canvas {
@@ -157,28 +185,358 @@
       font-size: 12px;
     }
 
+    /* Playback Controls */
+    .playback-controls {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 6px 10px;
+      border-radius: 6px;
+      align-items: center;
+    }
+
+    .playback-btn {
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 4px;
+      background: #333;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    .playback-btn:hover {
+      background: #444;
+    }
+
+    .playback-btn.active {
+      background: #e94560;
+    }
+
+    .playback-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .playback-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .playback-divider {
+      width: 1px;
+      height: 20px;
+      background: #555;
+      margin: 0 4px;
+    }
+
+    .playback-time {
+      font-size: 11px;
+      font-family: monospace;
+      color: #aaa;
+      min-width: 90px;
+      text-align: center;
+    }
+
+    /* Conversion Info Panel */
+    .conversion-panel {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 400px;
+      max-height: calc(100% - 24px);
+      background: rgba(0, 0, 0, 0.85);
+      border-radius: 8px;
+      font-size: 11px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .conversion-panel.hidden {
+      display: none;
+    }
+
+    .conversion-header {
+      padding: 8px 12px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .conversion-header h3 {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .conversion-toggle {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .conversion-content {
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .conversion-system {
+      border-bottom: 1px solid #333;
+    }
+
+    .conversion-system-header {
+      padding: 6px 12px;
+      background: #1a1a2e;
+      font-weight: 600;
+      color: #e94560;
+    }
+
+    .conversion-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .conversion-table th,
+    .conversion-table td {
+      padding: 4px 8px;
+      text-align: left;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .conversion-table th {
+      background: #1e1e2e;
+      color: #888;
+      font-weight: 500;
+    }
+
+    .conversion-table td {
+      font-family: 'Consolas', monospace;
+    }
+
+    .conversion-table td.module {
+      color: #61afef;
+      white-space: nowrap;
+    }
+
+    .conversion-table td.unity {
+      color: #98c379;
+    }
+
+    .conversion-table td.quarks {
+      color: #c678dd;
+    }
+
+    .status-ok {
+      color: #4ecca3;
+    }
+
+    .status-partial {
+      color: #e5c07b;
+    }
+
+    .status-unsupported {
+      color: #e06c75;
+    }
+
+    .conversion-note {
+      font-size: 10px;
+      color: #888;
+      font-style: italic;
+    }
+
     /* Footer / Log */
     .footer {
-      grid-column: 1 / -1;
-      background: #16213e;
+      flex-shrink: 0;
+      background: #1e1e1e;
       border-top: 1px solid #0f3460;
-      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+      height: 200px;
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: #252526;
+      border-bottom: 1px solid #3c3c3c;
+      flex-shrink: 0;
+    }
+
+    .log-header-title {
       font-size: 12px;
-      font-family: monospace;
-      max-height: 120px;
+      font-weight: 600;
+      color: #ccc;
+      margin-right: auto;
+    }
+
+    .log-filter-btn {
+      padding: 2px 8px;
+      border: none;
+      border-radius: 3px;
+      background: transparent;
+      color: #888;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .log-filter-btn:hover {
+      background: #3c3c3c;
+    }
+
+    .log-filter-btn.active {
+      background: #0e639c;
+      color: white;
+    }
+
+    .log-filter-btn .count {
+      background: #3c3c3c;
+      padding: 0 5px;
+      border-radius: 8px;
+      font-size: 10px;
+    }
+
+    .log-filter-btn.active .count {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .log-clear-btn {
+      padding: 2px 8px;
+      border: none;
+      border-radius: 3px;
+      background: transparent;
+      color: #888;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .log-clear-btn:hover {
+      background: #3c3c3c;
+      color: #fff;
+    }
+
+    .log-content {
+      flex: 1;
       overflow-y: auto;
+      font-size: 12px;
+      font-family: 'Consolas', 'Monaco', monospace;
     }
 
     .log-entry {
-      padding: 2px 0;
+      padding: 3px 12px;
+      border-bottom: 1px solid #2d2d2d;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .log-entry:hover {
+      background: #2a2d2e;
+    }
+
+    .log-entry.hidden {
+      display: none;
+    }
+
+    .log-icon {
+      flex-shrink: 0;
+      width: 14px;
+      text-align: center;
+    }
+
+    .log-time {
+      color: #6a9955;
+      flex-shrink: 0;
+      font-size: 11px;
+    }
+
+    .log-message {
+      flex: 1;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .log-entry.info {
+      color: #d4d4d4;
+    }
+
+    .log-entry.info .log-icon {
+      color: #3794ff;
+    }
+
+    .log-entry.warning {
+      color: #cca700;
+      background: rgba(204, 167, 0, 0.1);
+    }
+
+    .log-entry.warning .log-icon {
+      color: #cca700;
     }
 
     .log-entry.error {
-      color: #ff6b6b;
+      color: #f14c4c;
+      background: rgba(241, 76, 76, 0.1);
+    }
+
+    .log-entry.error .log-icon {
+      color: #f14c4c;
     }
 
     .log-entry.success {
       color: #4ecca3;
+    }
+
+    .log-entry.success .log-icon {
+      color: #4ecca3;
+    }
+
+    .log-resize-handle {
+      height: 6px;
+      background: #333;
+      cursor: ns-resize;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 100;
+    }
+
+    .log-resize-handle::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 3px;
+      background: #555;
+      border-radius: 2px;
+    }
+
+    .log-resize-handle:hover {
+      background: #0e639c;
+    }
+
+    .log-resize-handle:hover::after {
+      background: #fff;
     }
 
     /* Loading */
@@ -189,6 +547,189 @@
       transform: translate(-50%, -50%);
       color: #666;
     }
+
+    /* Shader Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.visible {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #1e1e2e;
+      border-radius: 8px;
+      max-width: 900px;
+      max-height: 85vh;
+      width: 90%;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      border-radius: 8px 8px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    .modal-close:hover {
+      color: #fff;
+    }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .shader-info {
+      margin-bottom: 16px;
+      padding: 12px;
+      background: #252536;
+      border-radius: 6px;
+    }
+
+    .shader-info-row {
+      display: flex;
+      margin-bottom: 8px;
+    }
+
+    .shader-info-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .shader-info-label {
+      width: 100px;
+      color: #888;
+      flex-shrink: 0;
+    }
+
+    .shader-info-value {
+      color: #eee;
+      word-break: break-all;
+    }
+
+    .shader-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .shader-status.cached {
+      background: #2e7d32;
+      color: white;
+    }
+
+    .shader-status.needs-conversion {
+      background: #f57c00;
+      color: white;
+    }
+
+    .shader-status.no-shader {
+      background: #666;
+      color: white;
+    }
+
+    .shader-prompt-area {
+      margin-top: 16px;
+    }
+
+    .shader-prompt-area label {
+      display: block;
+      margin-bottom: 8px;
+      color: #888;
+      font-size: 13px;
+    }
+
+    .shader-prompt-textarea {
+      width: 100%;
+      height: 250px;
+      background: #0a0a14;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #eee;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      padding: 12px;
+      resize: vertical;
+    }
+
+    .shader-prompt-textarea:focus {
+      outline: none;
+      border-color: #e94560;
+    }
+
+    .modal-footer {
+      padding: 16px 20px;
+      background: #16213e;
+      border-top: 1px solid #0f3460;
+      border-radius: 0 0 8px 8px;
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .shader-code-area {
+      margin-top: 16px;
+    }
+
+    .shader-code-area label {
+      display: block;
+      margin-bottom: 12px;
+      color: #888;
+      font-size: 13px;
+    }
+
+    .shader-file-path {
+      background: #0a0a14;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 12px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+    }
+
+    .shader-file-path-label {
+      color: #888;
+      margin-right: 8px;
+    }
+
+    .shader-file-path-value {
+      color: #4ecca3;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -198,27 +739,129 @@
       <button class="btn btn-secondary" id="btn-refresh">새로고침</button>
       <button class="btn btn-primary" id="btn-convert">변환</button>
       <button class="btn btn-secondary" id="btn-save">저장</button>
+      <button class="btn btn-secondary" id="btn-shader" title="쉐이더 변환 프롬프트">쉐이더</button>
     </header>
 
-    <aside class="sidebar">
-      <div class="path-input">
-        <input type="text" id="assets-path" placeholder="Unity Assets 폴더 경로 입력..." />
-      </div>
-      <div class="file-tree" id="file-tree">
-        <div class="loading">경로를 입력하세요</div>
-      </div>
-    </aside>
+    <div class="main-area">
+      <aside class="sidebar">
+        <div class="path-input">
+          <input type="text" id="assets-path" placeholder="Unity Assets 폴더 경로 입력..." />
+        </div>
+        <div class="file-tree" id="file-tree">
+          <div class="loading">경로를 입력하세요</div>
+        </div>
+      </aside>
 
-    <main class="preview">
-      <canvas id="preview-canvas"></canvas>
-      <div class="preview-info" id="preview-info">
-        파티클 시스템을 선택하세요
-      </div>
-    </main>
+      <main class="preview">
+        <canvas id="preview-canvas"></canvas>
+        <div class="preview-info" id="preview-info">
+          파티클 시스템을 선택하세요
+        </div>
+
+        <!-- Playback Controls -->
+        <div class="playback-controls" id="playback-controls">
+          <button class="playback-btn active" id="btn-play" title="Play">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button class="playback-btn" id="btn-pause" title="Pause">
+            <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <button class="playback-btn" id="btn-restart" title="Restart">
+            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+          </button>
+          <button class="playback-btn" id="btn-stop" title="Stop">
+            <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+          </button>
+          <div class="playback-divider"></div>
+          <button class="playback-btn active" id="btn-loop" title="Loop">
+            <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+          </button>
+          <div class="playback-divider"></div>
+          <span class="playback-time" id="playback-time">0.00 / 5.00s</span>
+        </div>
+
+        <div class="conversion-panel hidden" id="conversion-panel">
+          <div class="conversion-header">
+            <h3>변환 상세 정보</h3>
+            <button class="conversion-toggle" id="conversion-toggle">✕</button>
+          </div>
+          <div class="conversion-content" id="conversion-content">
+          </div>
+        </div>
+      </main>
+    </div>
 
     <footer class="footer" id="log">
-      <div class="log-entry">준비됨</div>
+      <div class="log-resize-handle" id="log-resize"></div>
+      <div class="log-header">
+        <span class="log-header-title">콘솔</span>
+        <button class="log-filter-btn active" data-filter="all">
+          전체 <span class="count" id="log-count-all">0</span>
+        </button>
+        <button class="log-filter-btn active" data-filter="info">
+          ℹ️ 정보 <span class="count" id="log-count-info">0</span>
+        </button>
+        <button class="log-filter-btn active" data-filter="warning">
+          ⚠️ 경고 <span class="count" id="log-count-warning">0</span>
+        </button>
+        <button class="log-filter-btn active" data-filter="error">
+          ❌ 에러 <span class="count" id="log-count-error">0</span>
+        </button>
+        <button class="log-clear-btn" id="log-clear">🗑️ 지우기</button>
+      </div>
+      <div class="log-content" id="log-content">
+        <div class="log-entry info">
+          <span class="log-icon">ℹ️</span>
+          <span class="log-time">[00:00:00]</span>
+          <span class="log-message">준비됨</span>
+        </div>
+      </div>
     </footer>
+  </div>
+
+  <!-- Shader Modal -->
+  <div class="modal-overlay" id="shader-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>쉐이더 변환</h2>
+        <button class="modal-close" id="shader-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="shader-info" id="shader-info">
+          <div class="shader-info-row">
+            <span class="shader-info-label">쉐이더명</span>
+            <span class="shader-info-value" id="shader-name">-</span>
+          </div>
+          <div class="shader-info-row">
+            <span class="shader-info-label">경로</span>
+            <span class="shader-info-value" id="shader-path">-</span>
+          </div>
+          <div class="shader-info-row">
+            <span class="shader-info-label">상태</span>
+            <span class="shader-info-value">
+              <span class="shader-status" id="shader-status">-</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="shader-prompt-area" id="shader-prompt-area">
+          <label>LLM 프롬프트 (복사하여 Claude에게 붙여넣기)</label>
+          <textarea class="shader-prompt-textarea" id="shader-prompt" readonly></textarea>
+        </div>
+
+        <div class="shader-code-area" id="shader-code-area" style="display: none;">
+          <label>LLM이 파일을 저장했다면 아래 버튼을 클릭하여 캐시에 등록하세요</label>
+          <div class="shader-file-path">
+            <span class="shader-file-path-label">저장 경로:</span>
+            <span class="shader-file-path-value" id="shader-output-path">-</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-copy-prompt">프롬프트 복사</button>
+        <button class="btn btn-primary" id="btn-register-shader" style="display: none;">캐시에 등록</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/client/main.ts"></script>
